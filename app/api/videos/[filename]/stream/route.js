@@ -2,6 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { getPlayableVideoPath } from '@/lib/video-service';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request, { params }) {
   try {
     const filename = decodeURIComponent(params.filename);
