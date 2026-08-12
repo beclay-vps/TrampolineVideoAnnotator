@@ -1,0 +1,25 @@
+services:
+  videoannotator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/beclay-vps/videoannotator:latest
+    container_name: videoannotator
+    restart: always
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/Data
+    volumes:
+      - ./Data:/app/Data
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.videoannotator.rule=Host(`videoannotator.beclay.fr`)"
+      - "traefik.http.routers.videoannotator.entrypoints=websecure"
+      - "traefik.http.routers.videoannotator.tls.certresolver=le"
+      - "traefik.http.services.videoannotator.loadbalancer.server.port=3000"
+
+networks:
+  web:
+    external: true
