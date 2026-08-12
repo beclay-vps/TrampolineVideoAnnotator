@@ -18,6 +18,8 @@ services:
       - "traefik.http.routers.videoannotator.rule=Host(`videoannotator.beclay.fr`)"
       - "traefik.http.routers.videoannotator.entrypoints=websecure"
       - "traefik.http.routers.videoannotator.tls.certresolver=le"
+      - "traefik.http.routers.videoannotator.middlewares=videoannotator-auth"
+      - "traefik.http.middlewares.videoannotator-auth.basicauth.users=Trampo:$$2y$$05$$C8goBFDDpnrVSlnRbdufEOJDfAs1DTWxLiguZibhhmwr/gz4IYgZa"
       - "traefik.http.services.videoannotator.loadbalancer.server.port=3000"
 
 networks:

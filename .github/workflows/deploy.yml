@@ -43,7 +43,7 @@ jobs:
           script: |
             mkdir -p /opt/videoannotator
             cd /opt/videoannotator
-            curl -sSL https://raw.githubusercontent.com/beclay-vps/videoannotator/main/docker-compose.yml -o docker-compose.yml
+            curl -sSL https://raw.githubusercontent.com/beclay-vps/TrampolineVideoAnnotator/main/docker-compose.yml -o docker-compose.yml
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             docker compose pull
             docker compose up -d --remove-orphans
