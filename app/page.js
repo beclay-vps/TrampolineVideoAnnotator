@@ -147,16 +147,20 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [jumps, isCompleted, activeVideo]);
 
-  // Add 2.0s jump at playhead cursor (or after existing jump if cursor is inside one)
+  // Add jump at playhead cursor without overlapping adjacent jumps (default max 2.0s)
   const handleAddDefaultJump = useCallback(() => {
     const maxDuration = videoInfo?.duration || 99999;
     const cTime = Math.round((currentTime || 0) * 1000) / 1000;
     let startT = cTime;
 
-    // Check if playhead cursor is inside any existing jump
-    const coveringJump = jumps.find((j) => cTime >= j.start_time && cTime < j.end_time);
-    if (coveringJump) {
-      startT = coveringJump.end_time;
+    // Shift startT past any overlapping or contiguous chain of existing jumps
+    while (true) {
+      const coveringJump = jumps.find((j) => startT >= j.start_time && startT < j.end_time);
+      if (coveringJump) {
+        startT = coveringJump.end_time;
+      } else {
+        break;
+      }
     }
 
     if (startT >= maxDuration) {
@@ -164,30 +168,101 @@ export default function Home() {
       return;
     }
 
-    const endT = Math.min(maxDuration, Math.round((startT + 2.0) * 1000) / 1000);
-    if (endT <= startT) {
-      showToast('Espace insuffisant à la fin de la vidéo', 'error');
+    // Find the next jump starting after startT to avoid overlapping it
+    const succeedingJumps = jumps.filter((j) => j.start_time > startT).sort((a, b) => a.start_time - b.start_time);
+    const maxAllowedEnd = succeedingJumps.length > 0 ? succeedingJumps[0].start_time : maxDuration;
+
+    const availableSpace = maxAllowedEnd - startT;
+    if (availableSpace < 0.1) {
+      showToast('Espace insuffisant entre les sauts pour en ajouter un nouveau', 'error');
       return;
     }
 
+    const defaultDuration = Math.min(2.0, Math.round(availableSpace * 1000) / 1000);
+    const endT = Math.round((startT + defaultDuration) * 1000) / 1000;
     const flightT = Math.round((endT - startT) * 1000) / 1000;
-    const defaultPreset = figPresets && figPresets.length > 0 ? figPresets[0] : { code: '800o', name: 'Double Back' };
 
     const newJump = {
       id: Date.now(),
       start_time: startT,
       end_time: endT,
       flight_time: flightT,
-      fig_code: defaultPreset.code,
-      fig_name: defaultPreset.name,
+      fig_code: '',
+      fig_name: '',
       notes: ''
     };
 
     setJumps((prev) => [...prev, newJump].sort((a, b) => a.start_time - b.start_time));
     setSelectedJumpId(newJump.id);
     setCurrentTime(startT);
-    showToast(`Saut (${defaultPreset.code}) ajouté à ${startT}s`);
-  }, [jumps, currentTime, figPresets, videoInfo]);
+    showToast(`Saut à remplir ajouté à ${startT}s`);
+  }, [jumps, currentTime, videoInfo]);
+
+  // Export JSON file for ALL videos and all jumps in the dataset
+  const handleExportAllJSON = useCallback(async () => {
+    try {
+      showToast('Préparation de l\'exportation de toutes les vidéos...');
+      const res = await fetch('/api/export');
+      if (!res.ok) throw new Error('Erreur serveur lors de la récupération des annotations');
+      const exportData = await res.json();
+
+      // Ensure active video in state reflects the current unsaved/saved jumps
+      if (activeVideo && Array.isArray(exportData.videos)) {
+        exportData.videos = exportData.videos.map((v) => {
+          if (v.video_filename === activeVideo.filename) {
+            const cleanJumps = jumps.map((j) => {
+              const preset = figPresets.find((p) => p.code === j.fig_code);
+              const difficulty = preset ? Math.round((preset.points || 0) * 10) / 10 : 0;
+
+              const cleanObj = {
+                start_time: j.start_time,
+                end_time: j.end_time,
+                flight_time: j.flight_time,
+                fig_code: j.fig_code || '',
+                difficulty
+              };
+
+              const name = j.fig_name || preset?.name;
+              if (name) cleanObj.fig_name = name;
+              if (j.notes && j.notes.trim()) cleanObj.notes = j.notes.trim();
+
+              return cleanObj;
+            });
+
+            const totalDifficulty = Math.round(cleanJumps.reduce((sum, j) => sum + (j.difficulty || 0), 0) * 10) / 10;
+
+            const cleanVideo = {
+              video_filename: activeVideo.filename,
+              is_completed: isCompleted,
+              total_difficulty: totalDifficulty,
+              jumps: cleanJumps
+            };
+
+            return cleanVideo;
+          }
+          return v;
+        });
+
+        exportData.total_jumps = exportData.videos.reduce((acc, v) => acc + (v.jumps ? v.jumps.length : 0), 0);
+      }
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `trampoline_annotations_export.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast(`Export de toutes les vidéos réussi (${exportData.total_jumps} sauts) !`);
+    } catch (err) {
+      console.error('Export error:', err);
+      showToast('Échec de l\'exportation JSON', 'error');
+    }
+  }, [activeVideo, jumps, isCompleted]);
 
   // Keyboard shortcut listener to add a jump (Enter, 'j', or '+')
   useEffect(() => {
@@ -213,6 +288,8 @@ export default function Home() {
         jumpCount={jumps.length}
         isCompleted={isCompleted}
         onToggleCompleted={handleToggleCompleted}
+        onExportJSON={handleExportAllJSON}
+        activeVideo={activeVideo}
       />
 
       <div className="flex-1 flex overflow-hidden p-3 gap-3">

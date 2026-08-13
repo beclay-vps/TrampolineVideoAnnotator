@@ -1,12 +1,16 @@
 'use client';
 
 import React from 'react';
-import { Film, CheckCircle2, AlertCircle, RefreshCw, Search } from 'lucide-react';
+import { Film, CheckCircle2, AlertCircle, RefreshCw, Search, Info } from 'lucide-react';
 
 export default function Sidebar({ videos, activeVideo, onSelectVideo, onRefresh, search, setSearch, isLoading = false }) {
   const filteredVideos = videos.filter(v => 
     v.filename.toLowerCase().includes(search.toLowerCase())
   );
+
+  const completedVideosCount = videos.filter((v) => v.is_completed).length;
+  const totalJumpsCount = videos.reduce((acc, v) => acc + (v.jump_count || 0), 0);
+  const totalVideosCount = videos.length;
 
   return (
     <aside className="w-72 panel-pro p-3.5 flex flex-col h-full gap-3 shrink-0">
@@ -14,7 +18,32 @@ export default function Sidebar({ videos, activeVideo, onSelectVideo, onRefresh,
         <div className="flex items-center gap-2">
           <Film size={16} className="text-[#8b949e]" />
           <h2 className="text-sm font-semibold text-[#f0f6fc]">Fichiers Vidéo</h2>
-          <span className="text-xs text-[#8b949e] font-mono">({videos.length})</span>
+          
+          <div className="relative group flex items-center">
+            <button
+              type="button"
+              className="w-5 h-5 rounded-full bg-[#21262d] hover:bg-[#30363d] text-[#58a6ff] hover:text-white border border-[#30363d] flex items-center justify-center transition-colors cursor-help"
+              aria-label="Statistiques"
+            >
+              <Info size={12} />
+            </button>
+
+            {/* Hover Tooltip Popover */}
+            <div className="absolute left-0 top-full mt-1.5 hidden group-hover:flex flex-col gap-1.5 bg-[#161b22] border border-[#30363d] rounded-md p-2.5 shadow-xl text-xs z-50 whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+              <div className="font-semibold text-[#f0f6fc] border-b border-[#30363d] pb-1 flex items-center gap-1.5">
+                <Info size={13} className="text-[#58a6ff]" />
+                <span>Statistiques</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 text-[#c9d1d9] font-mono text-[11px]">
+                <span>Vidéos terminées :</span>
+                <span className="font-bold text-emerald-400">{completedVideosCount} / {totalVideosCount}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 text-[#c9d1d9] font-mono text-[11px]">
+                <span>Total sauts annotés :</span>
+                <span className="font-bold text-[#58a6ff]">{totalJumpsCount}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <button 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Trash2, GripVertical, Plus } from 'lucide-react';
+import { Play, Trash2, GripVertical, Plus, AlertCircle } from 'lucide-react';
 import JumpPopover from './JumpPopover';
 
 export default function TimelineTrack({
@@ -22,6 +22,8 @@ export default function TimelineTrack({
 
   // Drag State: { type: 'resize-start' | 'resize-end' | 'move' | 'scrub', jumpId: number, startX: number, initialStart: number, initialEnd: number }
   const [dragState, setDragState] = useState(null);
+
+  const unfilledCount = jumps.filter((j) => !j.fig_code || j.fig_code.trim() === '').length;
 
   const timeToX = (t) => {
     if (!containerRef.current || !duration || duration <= 0) return 0;
@@ -58,20 +60,39 @@ export default function TimelineTrack({
         return;
       }
 
-      setJumps((prevJumps) =>
-        prevJumps.map((j) => {
+      setJumps((prevJumps) => {
+        const otherJumps = prevJumps.filter((o) => o.id !== dragState.jumpId);
+
+        // Find preceding jump limit (ends at or before initialStart)
+        const precedingJumps = otherJumps.filter((o) => o.end_time <= dragState.initialStart);
+        const prevJump = precedingJumps.reduce(
+          (latest, curr) => (!latest || curr.end_time > latest.end_time ? curr : latest),
+          null
+        );
+        const minStartAllowed = prevJump ? prevJump.end_time : 0;
+
+        // Find succeeding jump limit (starts at or after initialEnd)
+        const succeedingJumps = otherJumps.filter((o) => o.start_time >= dragState.initialEnd);
+        const nextJump = succeedingJumps.reduce(
+          (earliest, curr) => (!earliest || curr.start_time < earliest.start_time ? curr : earliest),
+          null
+        );
+        const maxEndAllowed = nextJump ? nextJump.start_time : duration;
+
+        return prevJumps.map((j) => {
           if (j.id !== dragState.jumpId) return j;
 
           let newStart = j.start_time;
           let newEnd = j.end_time;
 
           if (dragState.type === 'resize-start') {
-            newStart = Math.max(0, Math.min(j.end_time - 0.1, dragState.initialStart + deltaTime));
+            newStart = Math.max(minStartAllowed, Math.min(j.end_time - 0.1, dragState.initialStart + deltaTime));
           } else if (dragState.type === 'resize-end') {
-            newEnd = Math.max(j.start_time + 0.1, Math.min(duration, dragState.initialEnd + deltaTime));
+            newEnd = Math.max(j.start_time + 0.1, Math.min(maxEndAllowed, dragState.initialEnd + deltaTime));
           } else if (dragState.type === 'move') {
             const clipLength = dragState.initialEnd - dragState.initialStart;
-            newStart = Math.max(0, Math.min(duration - clipLength, dragState.initialStart + deltaTime));
+            const maxStartAllowed = maxEndAllowed - clipLength;
+            newStart = Math.max(minStartAllowed, Math.min(maxStartAllowed, dragState.initialStart + deltaTime));
             newEnd = newStart + clipLength;
           }
 
@@ -85,8 +106,8 @@ export default function TimelineTrack({
             end_time: newEnd,
             flight_time: flightTime
           };
-        })
-      );
+        });
+      });
     };
 
     const handleMouseUp = () => {
@@ -157,6 +178,12 @@ export default function TimelineTrack({
         <div className="flex items-center gap-2 font-semibold">
           <span>Chronologie des Sauts</span>
           <span className="text-[11px] font-mono text-[#58a6ff]">({jumps.length} saut{jumps.length === 1 ? '' : 's'})</span>
+          {unfilledCount > 0 && (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse font-bold flex items-center gap-1">
+              <AlertCircle size={12} className="text-amber-400 shrink-0" />
+              {unfilledCount} à remplir
+            </span>
+          )}
         </div>
 
         <button
@@ -206,6 +233,7 @@ export default function TimelineTrack({
             const endPct = (jump.end_time / (duration || 1)) * 100;
             const widthPct = Math.max(0.5, endPct - startPct);
             const isSelected = selectedJumpId === jump.id;
+            const isUnfilled = !jump.fig_code || jump.fig_code.trim() === '';
 
             return (
               <div
@@ -218,21 +246,29 @@ export default function TimelineTrack({
                     setActivePopoverJump(jump);
                   }
                 }}
-                className={`absolute top-2 bottom-2 rounded-md border flex items-center justify-between px-2 cursor-grab active:cursor-grabbing shadow-md group ${
+                className={`absolute top-2 bottom-2 rounded-md border flex items-center justify-between px-2 cursor-grab active:cursor-grabbing shadow-md group transition-colors ${
                   isSelected
-                    ? 'bg-[#1f242d] border-[#58a6ff] text-white ring-2 ring-[#58a6ff]/40 z-20'
-                    : 'bg-[#161b22] border-[#30363d] text-[#c9d1d9] hover:border-[#58a6ff]/60 hover:bg-[#21262d] z-10'
+                    ? isUnfilled
+                      ? 'bg-[#2a1d0d] border-amber-400 text-white ring-2 ring-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.4)] z-20'
+                      : 'bg-[#1f242d] border-[#58a6ff] text-white ring-2 ring-[#58a6ff]/40 z-20'
+                    : isUnfilled
+                      ? 'bg-[#1e170d] border-amber-500/80 border-dashed text-amber-200 hover:border-amber-400 hover:bg-[#281e10] shadow-[0_0_8px_rgba(245,158,11,0.2)] z-10'
+                      : 'bg-[#161b22] border-[#30363d] text-[#c9d1d9] hover:border-[#58a6ff]/60 hover:bg-[#21262d] z-10'
                 }`}
                 style={{
                   left: `${startPct}%`,
                   width: `${widthPct}%`
                 }}
-                title={`Saut #${idx + 1}: ${jump.fig_code || '40 o'} (${jump.flight_time}s) - Cliquez pour éditer`}
+                title={`Saut #${idx + 1}: ${isUnfilled ? 'À REMPLIR' : jump.fig_code} (${jump.flight_time}s)${
+                  jump.notes ? ` - "${jump.notes}"` : ''
+                } - Cliquez pour éditer`}
               >
                 {/* Left Resize Handle */}
                 <div
                   onMouseDown={(e) => handleClipMouseDown(e, jump, 'resize-start')}
-                  className="absolute left-0 top-0 bottom-0 w-2.5 bg-[#30363d] hover:bg-[#58a6ff] cursor-ew-resize rounded-l-md flex items-center justify-center opacity-70 group-hover:opacity-100 transition-colors"
+                  className={`absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize rounded-l-md flex items-center justify-center opacity-70 group-hover:opacity-100 transition-colors ${
+                    isUnfilled ? 'bg-amber-600/50 hover:bg-amber-400' : 'bg-[#30363d] hover:bg-[#58a6ff]'
+                  }`}
                   title="Déplacer le début du saut"
                 >
                   <div className="w-0.5 h-4 bg-white/60 rounded-full" />
@@ -240,12 +276,19 @@ export default function TimelineTrack({
 
                 {/* Clip Label Content */}
                 <div className="flex items-center gap-2 overflow-hidden mx-2 pointer-events-none">
-                  <span className="font-mono font-bold text-xs text-[#58a6ff] shrink-0">
+                  <span className={`font-mono font-bold text-xs shrink-0 ${isUnfilled ? 'text-amber-400' : 'text-[#58a6ff]'}`}>
                     #{idx + 1}
                   </span>
-                  <span className="font-mono text-xs font-semibold px-1.5 py-0.5 rounded bg-[#0d1117] border border-[#30363d] truncate">
-                    {jump.fig_code || 'Saut'}
-                  </span>
+                  {isUnfilled ? (
+                    <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 truncate flex items-center gap-1 animate-pulse">
+                      <AlertCircle size={11} className="text-amber-400 shrink-0" />
+                      <span>À REMPLIR</span>
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs font-semibold px-1.5 py-0.5 rounded bg-[#0d1117] border border-[#30363d] truncate">
+                      {jump.fig_code}
+                    </span>
+                  )}
                   <span className="font-mono text-[11px] text-emerald-400 font-semibold shrink-0">
                     {jump.flight_time?.toFixed(2)}s
                   </span>
@@ -254,7 +297,9 @@ export default function TimelineTrack({
                 {/* Right Resize Handle */}
                 <div
                   onMouseDown={(e) => handleClipMouseDown(e, jump, 'resize-end')}
-                  className="absolute right-0 top-0 bottom-0 w-2.5 bg-[#30363d] hover:bg-[#58a6ff] cursor-ew-resize rounded-r-md flex items-center justify-center opacity-70 group-hover:opacity-100 transition-colors"
+                  className={`absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize rounded-r-md flex items-center justify-center opacity-70 group-hover:opacity-100 transition-colors ${
+                    isUnfilled ? 'bg-amber-600/50 hover:bg-amber-400' : 'bg-[#30363d] hover:bg-[#58a6ff]'
+                  }`}
                   title="Déplacer la fin du saut"
                 >
                   <div className="w-0.5 h-4 bg-white/60 rounded-full" />
