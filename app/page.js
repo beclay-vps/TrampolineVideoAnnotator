@@ -264,6 +264,31 @@ export default function Home() {
     }
   }, [activeVideo, jumps, isCompleted]);
 
+  const [sidebarWidth, setSidebarWidth] = useState(288);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+
+  // Handle Sidebar Resizing
+  useEffect(() => {
+    if (!isResizingSidebar) return;
+
+    const handleMouseMove = (e) => {
+      // Clamp sidebar width between 180px and 600px
+      const newWidth = Math.max(180, Math.min(600, e.clientX - 12));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingSidebar]);
+
   // Keyboard shortcut listener to add a jump (Enter, 'j', or '+')
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -282,7 +307,9 @@ export default function Home() {
   }, [handleAddDefaultJump]);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-[#f0f6fc]">
+    <div className={`flex flex-col h-screen overflow-hidden bg-background text-[#f0f6fc] ${
+      isResizingSidebar ? 'select-none cursor-col-resize' : ''
+    }`}>
       <Header
         saveStatus={saveStatus}
         jumpCount={jumps.length}
@@ -292,7 +319,7 @@ export default function Home() {
         activeVideo={activeVideo}
       />
 
-      <div className="flex-1 flex overflow-hidden p-3 gap-3">
+      <div className="flex-1 flex overflow-hidden p-3 gap-2">
         <Sidebar
           videos={videos}
           activeVideo={activeVideo}
@@ -301,7 +328,20 @@ export default function Home() {
           search={search}
           setSearch={setSearch}
           isLoading={isLoadingVideos}
+          width={sidebarWidth}
         />
+
+        {/* Resizable Splitter Handle */}
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsResizingSidebar(true);
+          }}
+          className="w-2 hover:w-2 bg-[#161b22] hover:bg-[#1f6feb] active:bg-[#388bfd] border border-[#30363d] cursor-col-resize transition-colors rounded flex items-center justify-center shrink-0 group z-20"
+          title="Glisser pour redimensionner"
+        >
+          <div className="w-0.5 h-6 bg-[#484f58] group-hover:bg-white rounded-full" />
+        </div>
 
         <main className="flex-1 flex flex-col gap-2.5 overflow-hidden min-w-0">
           {/* Main Video Viewport (Ratio 3/1) */}

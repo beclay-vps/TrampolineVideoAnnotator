@@ -3,7 +3,7 @@
 import React from 'react';
 import { Film, CheckCircle2, AlertCircle, RefreshCw, Search, Info } from 'lucide-react';
 
-export default function Sidebar({ videos, activeVideo, onSelectVideo, onRefresh, search, setSearch, isLoading = false }) {
+export default function Sidebar({ videos, activeVideo, onSelectVideo, onRefresh, search, setSearch, isLoading = false, width = 288 }) {
   const filteredVideos = videos.filter(v => 
     v.filename.toLowerCase().includes(search.toLowerCase())
   );
@@ -13,7 +13,10 @@ export default function Sidebar({ videos, activeVideo, onSelectVideo, onRefresh,
   const totalVideosCount = videos.length;
 
   return (
-    <aside className="w-72 panel-pro p-3.5 flex flex-col h-full gap-3 shrink-0">
+    <aside
+      style={{ width: `${width}px` }}
+      className="panel-pro p-3.5 flex flex-col h-full gap-3 shrink-0 select-none"
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Film size={16} className="text-[#8b949e]" />

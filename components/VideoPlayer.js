@@ -14,7 +14,24 @@ export default function VideoPlayer({
   setIsPlaying
 }) {
   const videoRef = useRef(null);
+  const containerRef = useRef(null);
   const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  // Measure container dimensions to compute exact uncropped rotation scaling
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height
+        });
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const fps = videoInfo?.fps || 30.0;
   const frameTime = 1 / fps;
@@ -83,10 +100,30 @@ export default function VideoPlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [fps, videoInfo]);
 
+
+
   const normDeg = ((rotation % 360) + 360) % 360;
   const isPortrait = normDeg === 90 || normDeg === 270;
+
+  let scale = 1.0;
+  if (isPortrait && containerSize.width > 0 && containerSize.height > 0) {
+    const videoAspect = videoInfo?.width && videoInfo?.height ? videoInfo.width / videoInfo.height : (16 / 9);
+    const containerW = containerSize.width;
+    const containerH = containerSize.height;
+
+    // Unrotated element dimensions inside container
+    const unrotatedW = Math.min(containerW, containerH * videoAspect);
+    const unrotatedH = Math.min(containerH, containerW / videoAspect);
+
+    // When rotated 90/270deg, unrotatedW becomes vertical height, unrotatedH becomes horizontal width
+    const scaleHeight = containerH / unrotatedW;
+    const scaleWidth = containerW / unrotatedH;
+
+    scale = Math.min(1.0, scaleHeight, scaleWidth) * 0.96;
+  }
+
   const transformStyle = {
-    transform: `rotate(${rotation}deg)${isPortrait ? ' scale(0.68)' : ''}`
+    transform: `rotate(${rotation}deg)${isPortrait ? ` scale(${scale.toFixed(4)})` : ''}`
   };
 
   const formatTime = (sec) => {
@@ -99,7 +136,7 @@ export default function VideoPlayer({
   return (
     <div className="flex flex-col gap-2 h-full min-h-0">
       {/* Video Viewport Container */}
-      <div className="video-container flex-1 min-h-0">
+      <div ref={containerRef} className="video-container flex-1 min-h-0">
         {streamUrl ? (
           <video
             ref={videoRef}
